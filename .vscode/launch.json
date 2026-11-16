@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "minidb (consola)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "minidb",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "minidb (demo.sql)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "minidb",
+      "args": ["ejemplos/demo.sql"],
+      "console": "integratedTerminal"
+    }
+  ]
+}
