@@ -9,3 +9,10 @@ dist/
 .ruff_cache/
 .coverage
 *.db
+
+# rust
+engine/target/
+target/
+*.pyd
+*.so
+*.db-journal

@@ -1,0 +1,20 @@
+[package]
+name = "minidb-engine"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Motor de almacenamiento en disco de minidb"
+license = "MIT"
+publish = false
+
+[lib]
+name = "minidb_engine"
+# cdylib para que Python lo cargue, rlib para poder correr cargo test
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = { version = "0.30", optional = true, features = ["abi3-py311"] }
+
+[features]
+# sin esta feature el crate es Rust puro y cargo test no necesita Python
+python = ["dep:pyo3", "pyo3/extension-module"]

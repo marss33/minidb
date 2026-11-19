@@ -1,18 +1,26 @@
-CREATE TABLE alumnos (id INT, nombre TEXT, nota INT);
+CREATE TABLE alumnos (id INT PRIMARY KEY, nombre TEXT NOT NULL);
+CREATE TABLE notas (alumno INT NOT NULL, materia TEXT NOT NULL, nota INT);
+CREATE INDEX notas_alumno ON notas (alumno);
 
-INSERT INTO alumnos VALUES
-  (1, 'Ana', 9),
-  (2, 'Bruno', 6),
-  (3, 'Carla', NULL),
-  (4, 'Diego', 4),
-  (5, 'Eva', 6);
+INSERT INTO alumnos VALUES (1, 'Ana'), (2, 'Bruno'), (3, 'Carla'), (4, 'Diego');
+INSERT INTO notas VALUES
+  (1, 'Algebra', 9), (1, 'Fisica', 7),
+  (2, 'Algebra', 4), (2, 'Fisica', 6),
+  (3, 'Algebra', 10);
 
-SELECT * FROM alumnos;
+-- el promedio de cada alumno, aunque no tenga notas (LEFT JOIN)
+SELECT a.nombre, COUNT(n.nota) AS materias, AVG(n.nota) AS promedio
+FROM alumnos a LEFT JOIN notas n ON n.alumno = a.id
+GROUP BY a.nombre
+ORDER BY promedio DESC;
 
--- los que aprobaron, de mejor a peor nota
-SELECT nombre, nota FROM alumnos WHERE nota >= 6 ORDER BY nota DESC, nombre;
+-- como se busca: la PRIMARY KEY y el indice evitan recorrer las tablas
+EXPLAIN SELECT a.nombre, n.nota FROM alumnos a JOIN notas n ON n.alumno = a.id WHERE a.id = 2;
 
-UPDATE alumnos SET nota = nota + 1 WHERE nota < 6;
-DELETE FROM alumnos WHERE nota IS NULL;
+-- una transaccion: o se guardan los dos cambios o ninguno
+BEGIN;
+UPDATE notas SET nota = nota + 1 WHERE alumno = 2;
+DELETE FROM notas WHERE nota < 6;
+COMMIT;
 
-SELECT * FROM alumnos ORDER BY nombre;
+SELECT a.nombre, n.materia, n.nota FROM alumnos a JOIN notas n ON n.alumno = a.id ORDER BY a.nombre;

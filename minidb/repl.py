@@ -1,6 +1,11 @@
-"""Consola interactiva. Se usa con: python -m minidb [archivo.sql]"""
+"""Consola interactiva.
 
-import sys
+python -m minidb                       base en memoria
+python -m minidb --db datos.db         base guardada en datos.db
+python -m minidb [--db datos.db] script.sql   ejecuta el script y sale
+"""
+
+import argparse
 from pathlib import Path
 
 from . import __version__
@@ -9,15 +14,19 @@ from .errors import DBError
 from .nodes import Value
 
 PROMPT = "minidb> "
+PROMPT_IN_TRANSACTION = "minidb*> "  # entre BEGIN y COMMIT
 CONTINUATION = "   ...> "
 
 HELP = """\
 .tables          lista las tablas
-.schema TABLA    muestra como se creo una tabla
+.indexes         lista los indices
+.schema TABLA    muestra como se creo una tabla y sus indices
 .help            muestra esto
 .exit            sale
 
-Las consultas terminan con ; y pueden ocupar varias lineas."""
+Las consultas terminan con ; y pueden ocupar varias lineas.
+Con EXPLAIN antes de un SELECT, UPDATE o DELETE se ve si usa un indice.
+Entre BEGIN y COMMIT nada se guarda hasta el COMMIT (el prompt cambia a minidb*>)."""
 
 
 def show(value: Value) -> str:
@@ -74,6 +83,9 @@ def meta_command(db: Database, command: str) -> bool:
         print(HELP)
     elif name == ".tables":
         print("\n".join(sorted(db.tables)) or "(no hay tablas)")
+    elif name == ".indexes":
+        lines = [f"{i.name} ({i.table}.{i.column})" for i in db.indexes.values()]
+        print("\n".join(sorted(lines)) or "(no hay indices)")
     elif name == ".schema":
         if arg and arg not in db.tables:
             print(f"no existe la tabla {arg}")
@@ -83,19 +95,24 @@ def meta_command(db: Database, command: str) -> bool:
             print("(no hay tablas)")
         for table in tables:
             print(table.schema() + ";")
+            for index in sorted(db.indexes.values(), key=lambda i: i.name):
+                if index.table == table.name:
+                    print(index.schema() + ";")
     else:
         print(f"comando desconocido: {name} (probá .help)")
     return True
 
 
 def repl(db: Database) -> None:
-    print(f"minidb {__version__} - escribí .help para ver los comandos")
+    where = f"guardando en {db.path}" if db.path is not None else "en memoria"
+    print(f"minidb {__version__} ({where}) - escribí .help para ver los comandos")
     buffer: list[str] = []
 
     while True:
         try:
             # en windows a veces llega un BOM invisible al principio
-            line = input(CONTINUATION if buffer else PROMPT).lstrip("﻿")
+            prompt = PROMPT_IN_TRANSACTION if db.in_transaction else PROMPT
+            line = input(CONTINUATION if buffer else prompt).lstrip("﻿")
         except KeyboardInterrupt:
             # ctrl+c cancela la consulta a medio escribir, o sale si no hay nada
             print()
@@ -123,12 +140,24 @@ def repl(db: Database) -> None:
             run_sql(db, sql)
 
 
-def main() -> None:
-    db = Database()
-    if len(sys.argv) > 1:
-        run_sql(db, Path(sys.argv[1]).read_text(encoding="utf-8-sig"))
-    else:
-        repl(db)
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(prog="minidb", description="Base de datos hecha desde cero.")
+    parser.add_argument("script", nargs="?", type=Path, help="archivo .sql para ejecutar")
+    parser.add_argument(
+        "--db", type=Path, help="archivo donde se guarda la base (si no, en memoria)"
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        db = Database(args.db)
+    except (DBError, OSError) as e:
+        parser.exit(1, f"no se pudo abrir {args.db}: {e}\n")
+
+    with db:
+        if args.script is not None:
+            run_sql(db, args.script.read_text(encoding="utf-8-sig"))
+        else:
+            repl(db)
 
 
 if __name__ == "__main__":

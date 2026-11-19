@@ -1,5 +1,5 @@
 # minidb
 
-Base de datos que estoy haciendo desde cero en Python para entender cómo funcionan por dentro. Por ahora tiene su propio parser de SQL (CREATE, INSERT, SELECT con WHERE/ORDER BY/LIMIT, UPDATE, DELETE) y guarda todo en memoria.
+Base de datos que estoy haciendo desde cero para entender cómo funcionan por dentro. El SQL se parsea y ejecuta en Python, y las tablas se guardan en disco con un motor en Rust (B-trees, índices y journal).
 
-Se prueba con `python -m minidb` o `python -m minidb ejemplos/demo.sql`.
+Se instala con `pip install -e .` (hace falta Rust) y se prueba con `python -m minidb --db datos.db`.

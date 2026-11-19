@@ -18,11 +18,13 @@ class TokenType(Enum):
 KEYWORDS = {
     "SELECT", "FROM", "WHERE", "INSERT", "INTO", "VALUES", "CREATE", "TABLE", "DROP",
     "DELETE", "UPDATE", "SET", "AND", "OR", "NOT", "IS", "NULL", "ORDER", "BY", "ASC",
-    "DESC", "LIMIT", "INT", "TEXT",
+    "DESC", "LIMIT", "INT", "TEXT", "INDEX", "ON", "JOIN", "INNER", "LEFT", "OUTER",
+    "AS", "EXPLAIN", "BEGIN", "COMMIT", "ROLLBACK", "TRANSACTION", "PRIMARY", "KEY",
+    "UNIQUE", "GROUP", "HAVING",
 }  # fmt: skip
 
 # los de dos caracteres van primero para que "<=" no se lea como "<" y "="
-SYMBOLS = ("<=", ">=", "!=", "<>", "=", "<", ">", "(", ")", ",", ";", "*", "+", "-", "/")
+SYMBOLS = ("<=", ">=", "!=", "<>", "=", "<", ">", "(", ")", ",", ";", "*", "+", "-", "/", ".")
 
 
 @dataclass(frozen=True)

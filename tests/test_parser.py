@@ -2,18 +2,28 @@ import pytest
 
 from minidb.errors import SQLSyntaxError
 from minidb.nodes import (
+    Aggregate,
+    Begin,
     BinaryOp,
     Column,
     ColumnDef,
+    Commit,
+    CreateIndex,
     CreateTable,
     Delete,
+    DropIndex,
     DropTable,
+    Explain,
     Insert,
     IsNull,
+    Join,
     Literal,
     OrderBy,
+    Rollback,
     Select,
+    SelectItem,
     Statement,
+    TableRef,
     UnaryOp,
     Update,
 )
@@ -58,12 +68,57 @@ def test_insert_con_columnas() -> None:
 
 def test_select_completo() -> None:
     assert one("SELECT a, b FROM t WHERE a > 1 ORDER BY b DESC, a LIMIT 5") == Select(
-        table="t",
-        columns=("a", "b"),
+        table=TableRef("t"),
+        columns=(SelectItem(Column("a")), SelectItem(Column("b"))),
         where=BinaryOp(">", Column("a"), Literal(1)),
-        order_by=(OrderBy("b", descending=True), OrderBy("a")),
+        order_by=(OrderBy(Column("b"), descending=True), OrderBy(Column("a"))),
         limit=5,
     )
+
+
+def test_join_con_alias_y_columnas_calificadas() -> None:
+    sql = """
+        SELECT a.nombre, m.nombre FROM alumnos a
+        JOIN inscripciones AS i ON i.alumno = a.id
+        LEFT JOIN materias m ON m.id = i.materia
+        WHERE a.id > 1 ORDER BY m.nombre
+    """
+    assert one(sql) == Select(
+        table=TableRef("alumnos", "a"),
+        columns=(SelectItem(Column("nombre", "a")), SelectItem(Column("nombre", "m"))),
+        joins=(
+            Join(
+                TableRef("inscripciones", "i"),
+                BinaryOp("=", Column("alumno", "i"), Column("id", "a")),
+            ),
+            Join(
+                TableRef("materias", "m"),
+                BinaryOp("=", Column("id", "m"), Column("materia", "i")),
+                left=True,
+            ),
+        ),
+        where=BinaryOp(">", Column("id", "a"), Literal(1)),
+        order_by=(OrderBy(Column("nombre", "m")),),
+    )
+
+
+def test_inner_join_y_left_outer_join() -> None:
+    stmt = one("SELECT * FROM a INNER JOIN b ON 1 = 1 LEFT OUTER JOIN c ON 1 = 1")
+    assert isinstance(stmt, Select)
+    assert [(j.table.name, j.left) for j in stmt.joins] == [("b", False), ("c", True)]
+
+
+def test_indices() -> None:
+    assert one("CREATE INDEX idx_nota ON alumnos (nota)") == CreateIndex(
+        "idx_nota", "alumnos", "nota"
+    )
+    assert one("DROP INDEX idx_nota") == DropIndex("idx_nota")
+
+
+def test_explain() -> None:
+    assert one("EXPLAIN DELETE FROM t") == Explain(Delete("t"))
+    with pytest.raises(SQLSyntaxError, match="EXPLAIN solo"):
+        one("EXPLAIN DROP TABLE t")
 
 
 def test_select_asterisco() -> None:
@@ -140,7 +195,7 @@ def test_varias_sentencias() -> None:
 @pytest.mark.parametrize(
     ("sql", "message"),
     [
-        ("SELECT FROM t", "se esperaba un nombre"),
+        ("SELECT FROM t", "se esperaba un valor o una columna"),
         ("SELECT * t", "se esperaba FROM"),
         ("SELECT * FROM t WHERE", "se esperaba un valor"),
         ("CREATE TABLE t (a FLOAT)", "se esperaba un tipo"),
@@ -152,3 +207,43 @@ def test_varias_sentencias() -> None:
 def test_errores_de_sintaxis(sql: str, message: str) -> None:
     with pytest.raises(SQLSyntaxError, match=message):
         parse(sql)
+
+
+def test_transacciones() -> None:
+    assert parse("BEGIN; COMMIT; BEGIN TRANSACTION; ROLLBACK TRANSACTION") == [
+        Begin(),
+        Commit(),
+        Begin(),
+        Rollback(),
+    ]
+
+
+def test_restricciones_de_columnas() -> None:
+    stmt = one("CREATE TABLE t (id INT PRIMARY KEY, email TEXT UNIQUE NOT NULL, x INT)")
+    assert stmt == CreateTable(
+        "t",
+        (
+            ColumnDef("id", "INT", primary_key=True),
+            ColumnDef("email", "TEXT", unique=True, not_null=True),
+            ColumnDef("x", "INT"),
+        ),
+    )
+    assert one("CREATE UNIQUE INDEX i ON t (email)") == CreateIndex("i", "t", "email", unique=True)
+
+
+def test_group_by_having_y_funciones() -> None:
+    stmt = one("""
+        SELECT alumno, COUNT(*) AS n, SUM(nota + 1) FROM notas
+        GROUP BY alumno HAVING COUNT(*) > 1 ORDER BY n DESC
+    """)
+    assert stmt == Select(
+        table=TableRef("notas"),
+        columns=(
+            SelectItem(Column("alumno")),
+            SelectItem(Aggregate("COUNT", None), "n"),
+            SelectItem(Aggregate("SUM", BinaryOp("+", Column("nota"), Literal(1)))),
+        ),
+        group_by=(Column("alumno"),),
+        having=BinaryOp(">", Aggregate("COUNT", None), Literal(1)),
+        order_by=(OrderBy(Column("n"), descending=True),),
+    )

@@ -1,22 +1,25 @@
 [build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
+# maturin compila el motor en Rust (engine/) y lo mete en el paquete como minidb._engine
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
 
 [project]
 name = "minidb"
-version = "0.1.0"
-description = "Base de datos relacional hecha desde cero en Python"
+version = "0.2.0"
+description = "Base de datos relacional hecha desde cero: SQL en Python, almacenamiento en Rust"
 readme = "README.md"
 requires-python = ">=3.11"
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11"]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "maturin>=1.9,<2"]
 
 [project.scripts]
 minidb = "minidb.repl:main"
 
-[tool.setuptools.packages.find]
-include = ["minidb*"]
+[tool.maturin]
+manifest-path = "engine/Cargo.toml"
+module-name = "minidb._engine"
+features = ["python"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -4,8 +4,8 @@ from minidb import Database, ExecutionError
 
 
 @pytest.fixture
-def db() -> Database:
-    db = Database()
+def db(empty: Database) -> Database:
+    db = empty
     db.execute("""
         CREATE TABLE alumnos (id INT, nombre TEXT, nota INT);
         INSERT INTO alumnos VALUES
@@ -69,8 +69,8 @@ def test_order_by_pone_null_primero(db: Database) -> None:
     assert db.query("SELECT id FROM alumnos ORDER BY nota") == [(3,), (4,), (2,), (1,)]
 
 
-def test_order_by_varias_columnas() -> None:
-    db = Database()
+def test_order_by_varias_columnas(empty: Database) -> None:
+    db = empty
     db.execute("""
         CREATE TABLE t (a INT, b TEXT);
         INSERT INTO t VALUES (1, 'z'), (2, 'x'), (1, 'y'), (2, 'w');
@@ -88,8 +88,8 @@ def test_insert_con_columnas_deja_el_resto_en_null(db: Database) -> None:
     assert db.query("SELECT * FROM alumnos WHERE id = 5") == [(5, "Eva", None)]
 
 
-def test_insert_acepta_expresiones() -> None:
-    db = Database()
+def test_insert_acepta_expresiones(empty: Database) -> None:
+    db = empty
     db.execute("CREATE TABLE t (a INT)")
     db.execute("INSERT INTO t VALUES (2 * 3 + 1), (-4)")
     assert db.query("SELECT a FROM t") == [(7,), (-4,)]
@@ -101,8 +101,8 @@ def test_update(db: Database) -> None:
     assert db.query("SELECT nota FROM alumnos") == [(9,), (7,), (None,), (5,)]
 
 
-def test_update_usa_los_valores_viejos() -> None:
-    db = Database()
+def test_update_usa_los_valores_viejos(empty: Database) -> None:
+    db = empty
     db.execute("CREATE TABLE t (a INT, b INT); INSERT INTO t VALUES (1, 2)")
     db.execute("UPDATE t SET a = b, b = a")
     assert db.query("SELECT * FROM t") == [(2, 1)]
@@ -125,8 +125,8 @@ def test_drop_table(db: Database) -> None:
         db.query("SELECT * FROM alumnos")
 
 
-def test_division_entera_trunca_hacia_cero() -> None:
-    db = Database()
+def test_division_entera_trunca_hacia_cero(empty: Database) -> None:
+    db = empty
     db.execute("CREATE TABLE t (a INT); INSERT INTO t VALUES (7), (-7)")
     assert db.query("SELECT a FROM t WHERE a / 2 = 3 OR a / 2 = -3") == [(7,), (-7,)]
 
@@ -144,6 +144,7 @@ def test_division_entera_trunca_hacia_cero() -> None:
         ("INSERT INTO alumnos VALUES ('uno', 'x', 1)", "es INT y se le paso TEXT"),
         ("INSERT INTO alumnos VALUES (1 = 1, 'x', 1)", "es INT y se le paso BOOL"),
         ("INSERT INTO alumnos VALUES (id, 'x', 1)", "no se pueden usar columnas"),
+        ("INSERT INTO alumnos VALUES (9223372036854775807 + 1, 'x', 1)", "no entra en un INT"),
         ("UPDATE alumnos SET nombre = 5", "es TEXT y se le paso INT"),
         ("SELECT * FROM alumnos WHERE nombre > 3", "no se puede comparar TEXT con INT"),
         ("SELECT * FROM alumnos WHERE nombre + 1 = 2", "necesita numeros"),
@@ -162,8 +163,8 @@ def test_insert_que_falla_no_guarda_nada(db: Database) -> None:
     assert len(db.query("SELECT * FROM alumnos")) == 4
 
 
-def test_update_que_falla_no_cambia_nada() -> None:
-    db = Database()
+def test_update_que_falla_no_cambia_nada(empty: Database) -> None:
+    db = empty
     db.execute("CREATE TABLE t (a INT); INSERT INTO t VALUES (2), (0)")
     with pytest.raises(ExecutionError, match="division por cero"):
         db.execute("UPDATE t SET a = 10 / a")

@@ -9,10 +9,11 @@ from collections.abc import Callable, Iterator
 from typing import Any
 
 from .errors import ExecutionError
-from .nodes import BinaryOp, Column, Expr, IsNull, Literal, UnaryOp, Value
+from .nodes import Aggregate, BinaryOp, Column, Expr, IsNull, Literal, UnaryOp, Value
 
-# dado el nombre de una columna devuelve su valor en la fila actual
-Env = Callable[[str], Value]
+# dada una columna devuelve su valor en la fila actual. En una consulta con
+# GROUP BY tambien calcula las funciones de agregacion sobre el grupo actual
+Env = Callable[[Column | Aggregate], Value]
 
 COMPARE: dict[str, Callable[[Any, Any], Any]] = {
     "=": operator.eq,
@@ -38,8 +39,8 @@ def evaluate(expr: Expr, env: Env) -> Value:
     match expr:
         case Literal(value):
             return value
-        case Column(name):
-            return env(name)
+        case Column() | Aggregate():
+            return env(expr)
         case IsNull(operand, negated):
             return (evaluate(operand, env) is None) != negated
         case UnaryOp("NOT", operand):
@@ -57,16 +58,57 @@ def evaluate(expr: Expr, env: Env) -> Value:
     raise AssertionError(f"expresion desconocida: {expr!r}")
 
 
-def columns_in(expr: Expr) -> Iterator[str]:
+def columns_in(expr: Expr, *, inside_aggregates: bool = True) -> Iterator[Column]:
     """Todas las columnas que usa una expresion (para validar antes de recorrer filas)."""
     match expr:
-        case Column(name):
-            yield name
+        case Column():
+            yield expr
+        case Aggregate(_, arg):
+            if arg is not None and inside_aggregates:
+                yield from columns_in(arg)
         case UnaryOp(_, operand) | IsNull(operand, _):
-            yield from columns_in(operand)
+            yield from columns_in(operand, inside_aggregates=inside_aggregates)
         case BinaryOp(_, left, right):
-            yield from columns_in(left)
-            yield from columns_in(right)
+            yield from columns_in(left, inside_aggregates=inside_aggregates)
+            yield from columns_in(right, inside_aggregates=inside_aggregates)
+
+
+def aggregates_in(expr: Expr) -> Iterator[Aggregate]:
+    match expr:
+        case Aggregate():
+            yield expr
+        case UnaryOp(_, operand) | IsNull(operand, _):
+            yield from aggregates_in(operand)
+        case BinaryOp(_, left, right):
+            yield from aggregates_in(left)
+            yield from aggregates_in(right)
+
+
+def render(expr: Expr) -> str:
+    """La expresion como texto, para el nombre de una columna del resultado."""
+    match expr:
+        case Literal(None):
+            return "NULL"
+        case Literal(str() as text):
+            return "'" + text.replace("'", "''") + "'"
+        case Literal(value):
+            return str(value)
+        case Column():
+            return str(expr)
+        case Aggregate(func, arg):
+            return f"{func.lower()}({'*' if arg is None else render(arg)})"
+        case IsNull(operand, negated):
+            return f"{render(operand)} IS {'NOT ' if negated else ''}NULL"
+        case UnaryOp("NOT", operand):
+            return f"NOT {render(operand)}"
+        case UnaryOp(op, operand):
+            return f"{op}{render(operand)}"
+        case BinaryOp(op, left, right):
+            parts = [
+                f"({render(e)})" if isinstance(e, BinaryOp) else render(e) for e in (left, right)
+            ]
+            return f"{parts[0]} {op} {parts[1]}"
+    raise AssertionError(f"expresion desconocida: {expr!r}")
 
 
 def binary(op: str, a: Value, b: Value) -> Value:
